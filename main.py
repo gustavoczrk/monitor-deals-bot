@@ -3,13 +3,23 @@ import math
 import os
 import urllib.request
 from collections.abc import Callable
+from pathlib import Path
 
 from watchlist import MONITORS
 from amazon import AmazonOffer, fetch_amazon_offer
 from kabum import fetch_kabum_price
+from state import (
+    DEFAULT_STATE_PATH,
+    load_state,
+    record_notification,
+    record_observation,
+    save_state,
+    should_notify,
+)
 
 
 NTFY_SERVER = "https://ntfy.sh"
+KABUM_PRODUCT_ID = "747516"
 
 
 def send_notification(
@@ -98,15 +108,27 @@ def process_offer(
     price: float,
     store: str,
     url: str,
+    offer_key: str,
+    state: dict,
+    state_path: Path = DEFAULT_STATE_PATH,
     details: list[str] | None = None,
 ) -> None:
     monitor = find_monitor(model)
     result = evaluate_price(monitor, price)
+    notify = should_notify(state, offer_key, price, result)
 
     if result == "ignore":
+        record_observation(state, offer_key, price, result)
+        save_state(state, state_path)
         print(
             f"Ignorado: {model} por R$ {price:.2f}"
         )
+        return
+
+    if not notify:
+        record_observation(state, offer_key, price, result)
+        save_state(state, state_path)
+        print(f"Sem novo alerta: {model} por R$ {price:.2f}")
         return
 
     formatted_price = format_price(price)
@@ -137,10 +159,13 @@ def process_offer(
         tags=tags,
     )
 
+    record_notification(state, offer_key, price, result)
+    save_state(state, state_path)
+
     print(f"Alerta enviado: {model} - {formatted_price}")
 
 
-def check_kabum(model: str) -> None:
+def check_kabum(model: str, state: dict, state_path: Path) -> None:
     url = (
         "https://www.kabum.com.br/produto/747516/"
         "monitor-gamer-asus-tuf-27-qhd-210hz-0-3ms-fast-ips-"
@@ -159,10 +184,17 @@ def check_kabum(model: str) -> None:
         price=price,
         store="Kabum",
         url=url,
+        offer_key=f"kabum:{KABUM_PRODUCT_ID}",
+        state=state,
+        state_path=state_path,
     )
 
 
-def check_amazon(monitor: dict) -> AmazonOffer:
+def check_amazon(
+    monitor: dict,
+    state: dict,
+    state_path: Path,
+) -> AmazonOffer:
     offer = fetch_amazon_offer(
         url=monitor["amazon_url"],
         expected_asin=monitor["amazon_asin"],
@@ -181,6 +213,9 @@ def check_amazon(monitor: dict) -> AmazonOffer:
         price=offer.cash_price,
         store="Amazon",
         url=offer.url,
+        offer_key=f"amazon:{offer.asin}",
+        state=state,
+        state_path=state_path,
         details=details,
     )
     return offer
@@ -189,16 +224,17 @@ def check_amazon(monitor: dict) -> AmazonOffer:
 def _run_store(store: str, action: Callable[[], None]) -> None:
     try:
         action()
-    except (RuntimeError, ValueError) as error:
+    except (RuntimeError, ValueError, OSError) as error:
         print(f"Erro na {store}: {error}")
 
 
-def main() -> None:
+def main(state_path: Path = DEFAULT_STATE_PATH) -> None:
     model = "ASUS TUF VG27AQ5A"
     monitor = find_monitor(model)
+    state = load_state(state_path)
 
-    _run_store("Kabum", lambda: check_kabum(model))
-    _run_store("Amazon", lambda: check_amazon(monitor))
+    _run_store("Kabum", lambda: check_kabum(model, state, state_path))
+    _run_store("Amazon", lambda: check_amazon(monitor, state, state_path))
 
 
 if __name__ == "__main__":

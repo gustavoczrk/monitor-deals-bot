@@ -4,3 +4,5 @@ __pycache__/
 .env
 kabum_test.html
 amazon_test.html
+state.json
+.state.json.*.tmp
