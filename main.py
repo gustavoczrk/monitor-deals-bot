@@ -2,8 +2,10 @@ import json
 import math
 import os
 import urllib.request
+from collections.abc import Callable
 
 from watchlist import MONITORS
+from amazon import AmazonOffer, fetch_amazon_offer
 from kabum import fetch_kabum_price
 
 
@@ -82,11 +84,21 @@ def evaluate_price(monitor: dict, price: float) -> str:
     return "ignore"
 
 
+def format_price(price: float) -> str:
+    return (
+        f"R$ {price:,.2f}"
+        .replace(",", "X")
+        .replace(".", ",")
+        .replace("X", ".")
+    )
+
+
 def process_offer(
     model: str,
     price: float,
     store: str,
     url: str,
+    details: list[str] | None = None,
 ) -> None:
     monitor = find_monitor(model)
     result = evaluate_price(monitor, price)
@@ -97,12 +109,7 @@ def process_offer(
         )
         return
 
-    formatted_price = (
-        f"R$ {price:,.2f}"
-        .replace(",", "X")
-        .replace(".", ",")
-        .replace("X", ".")
-    )
+    formatted_price = format_price(price)
 
     if result == "hot":
         title = "🔥🔥 PREÇO EXCELENTE"
@@ -113,11 +120,14 @@ def process_offer(
         priority = 4
         tags = "fire,computer"
 
-    message = (
-        f"{model}\n"
-        f"{formatted_price} - {store}\n\n"
-        "27\" | QHD | IPS"
-    )
+    if details:
+        message = f"{model}\n{store}\n\n" + "\n".join(details)
+    else:
+        message = (
+            f"{model}\n"
+            f"{formatted_price} - {store}\n\n"
+            "27\" | QHD | IPS"
+        )
 
     send_notification(
         title=title,
@@ -130,9 +140,7 @@ def process_offer(
     print(f"Alerta enviado: {model} - {formatted_price}")
 
 
-def main() -> None:
-    model = "ASUS TUF VG27AQ5A"
-
+def check_kabum(model: str) -> None:
     url = (
         "https://www.kabum.com.br/produto/747516/"
         "monitor-gamer-asus-tuf-27-qhd-210hz-0-3ms-fast-ips-"
@@ -152,6 +160,45 @@ def main() -> None:
         store="Kabum",
         url=url,
     )
+
+
+def check_amazon(monitor: dict) -> AmazonOffer:
+    offer = fetch_amazon_offer(
+        url=monitor["amazon_url"],
+        expected_asin=monitor["amazon_asin"],
+        expected_model=monitor["amazon_model"],
+    )
+    print(f"Preço encontrado na Amazon: R$ {offer.cash_price:.2f}")
+
+    details = [f"Pix/NuPay: {format_price(offer.cash_price)}"]
+    if offer.card_price is not None:
+        details.append(f"Cartão: {format_price(offer.card_price)}")
+    if offer.seller:
+        details.append(f"Vendido por: {offer.seller}")
+
+    process_offer(
+        model=monitor["model"],
+        price=offer.cash_price,
+        store="Amazon",
+        url=offer.url,
+        details=details,
+    )
+    return offer
+
+
+def _run_store(store: str, action: Callable[[], None]) -> None:
+    try:
+        action()
+    except (RuntimeError, ValueError) as error:
+        print(f"Erro na {store}: {error}")
+
+
+def main() -> None:
+    model = "ASUS TUF VG27AQ5A"
+    monitor = find_monitor(model)
+
+    _run_store("Kabum", lambda: check_kabum(model))
+    _run_store("Amazon", lambda: check_amazon(monitor))
 
 
 if __name__ == "__main__":

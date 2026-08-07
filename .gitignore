@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 .env
 kabum_test.html
+amazon_test.html

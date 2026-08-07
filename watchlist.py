@@ -3,6 +3,9 @@ MONITORS = [
         "model": "ASUS TUF VG27AQ5A",
         "alert_price": 1300.00,
         "hot_price": 1200.00,
+        "amazon_asin": "B0BSH2VZ5C",
+        "amazon_model": "VG27AQ5A",
+        "amazon_url": "https://www.amazon.com.br/dp/B0BSH2VZ5C",
     },
     {
         "model": "AOC Q27G4F",
