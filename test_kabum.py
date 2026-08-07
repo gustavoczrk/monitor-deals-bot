@@ -28,6 +28,16 @@ class ExtractKabumPriceTests(unittest.TestCase):
 
         self.assertEqual(extract_kabum_price(html, "TEST-27"), 1499.99)
 
+    def test_same_parser_supports_all_configured_kabum_models(self):
+        for model in ("VG27AQ5A", "GS27QA-AS", "PG27QFT1B", "XG27ACS"):
+            with self.subTest(model=model):
+                html = (
+                    f'"friendlyName":"monitor-gamer-{model.lower()}",'
+                    '"prices":{"priceWithDiscount":1299.99}'
+                )
+
+                self.assertEqual(extract_kabum_price(html, model), 1299.99)
+
     def test_rejects_missing_expected_model(self):
         html = (
             '"friendlyName":"Monitor OUTRO",'

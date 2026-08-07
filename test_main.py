@@ -67,8 +67,15 @@ class EvaluatePriceTests(unittest.TestCase):
             url="https://www.amazon.com.br/dp/B0BSH2VZ5C",
         )
         monitor = app.find_monitor("ASUS TUF VG27AQ5A")
+        source = next(
+            source
+            for source in monitor["sources"]
+            if source["store"] == "amazon"
+        )
 
-        app.check_amazon(monitor, new_state(), Path("unused-state.json"))
+        app.check_amazon(
+            monitor, source, new_state(), Path("unused-state.json")
+        )
 
         details = process.call_args.kwargs["details"]
         self.assertIn("Pix/NuPay: R$ 1.287,98", details)
@@ -80,16 +87,23 @@ class EvaluatePriceTests(unittest.TestCase):
     def test_store_failure_does_not_stop_next_store(self, check_kabum, check_amazon):
         app.main()
 
-        check_kabum.assert_called_once()
+        self.assertEqual(check_kabum.call_count, 4)
         check_amazon.assert_called_once()
 
     @patch("main.fetch_amazon_offer", side_effect=RuntimeError("falha Amazon"))
     def test_store_error_does_not_change_commercial_state(self, fetch_offer):
         state = new_state()
         monitor = app.find_monitor("ASUS TUF VG27AQ5A")
+        source = next(
+            source
+            for source in monitor["sources"]
+            if source["store"] == "amazon"
+        )
 
         with self.assertRaisesRegex(RuntimeError, "falha Amazon"):
-            app.check_amazon(monitor, state, Path("unused-state.json"))
+            app.check_amazon(
+                monitor, source, state, Path("unused-state.json")
+            )
 
         self.assertEqual(state, new_state())
 
@@ -135,6 +149,34 @@ class EvaluatePriceTests(unittest.TestCase):
 
             send.assert_called_once()
             self.assertTrue(state_path.exists())
+
+    @patch("main.check_source")
+    def test_main_iterates_all_configured_sources(self, check_source):
+        app.main()
+
+        source_ids = [call.args[1]["id"] for call in check_source.call_args_list]
+        self.assertEqual(
+            source_ids,
+            ["747516", "B0BSH2VZ5C", "613323", "911990", "626864"],
+        )
+
+    @patch("main.check_source")
+    def test_one_product_error_does_not_interrupt_iteration(self, check_source):
+        visited = []
+
+        def run(monitor, source, state, state_path):
+            visited.append(source["id"])
+            if source["id"] == "911990":
+                raise RuntimeError("falha ASRock")
+
+        check_source.side_effect = run
+
+        app.main()
+
+        self.assertEqual(
+            visited,
+            ["747516", "B0BSH2VZ5C", "613323", "911990", "626864"],
+        )
 
 
 if __name__ == "__main__":

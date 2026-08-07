@@ -19,7 +19,6 @@ from state import (
 
 
 NTFY_SERVER = "https://ntfy.sh"
-KABUM_PRODUCT_ID = "747516"
 
 
 def send_notification(
@@ -165,26 +164,25 @@ def process_offer(
     print(f"Alerta enviado: {model} - {formatted_price}")
 
 
-def check_kabum(model: str, state: dict, state_path: Path) -> None:
-    url = (
-        "https://www.kabum.com.br/produto/747516/"
-        "monitor-gamer-asus-tuf-27-qhd-210hz-0-3ms-fast-ips-"
-        "g-sync-comp-freesync-premium-hdr10-som-integrado-vg27aq5a"
-    )
-
+def check_kabum(
+    monitor: dict,
+    source: dict,
+    state: dict,
+    state_path: Path,
+) -> None:
     price = fetch_kabum_price(
-        url=url,
-        expected_model="VG27AQ5A",
+        url=source["url"],
+        expected_model=source["expected_model"],
     )
 
     print(f"Preço encontrado na Kabum: R$ {price:.2f}")
 
     process_offer(
-        model=model,
+        model=monitor["model"],
         price=price,
         store="Kabum",
-        url=url,
-        offer_key=f"kabum:{KABUM_PRODUCT_ID}",
+        url=source["url"],
+        offer_key=f"kabum:{source['id']}",
         state=state,
         state_path=state_path,
     )
@@ -192,13 +190,14 @@ def check_kabum(model: str, state: dict, state_path: Path) -> None:
 
 def check_amazon(
     monitor: dict,
+    source: dict,
     state: dict,
     state_path: Path,
 ) -> AmazonOffer:
     offer = fetch_amazon_offer(
-        url=monitor["amazon_url"],
-        expected_asin=monitor["amazon_asin"],
-        expected_model=monitor["amazon_model"],
+        url=source["url"],
+        expected_asin=source["id"],
+        expected_model=source["expected_model"],
     )
     print(f"Preço encontrado na Amazon: R$ {offer.cash_price:.2f}")
 
@@ -221,6 +220,21 @@ def check_amazon(
     return offer
 
 
+def check_source(
+    monitor: dict,
+    source: dict,
+    state: dict,
+    state_path: Path,
+) -> None:
+    if source["store"] == "kabum":
+        check_kabum(monitor, source, state, state_path)
+        return
+    if source["store"] == "amazon":
+        check_amazon(monitor, source, state, state_path)
+        return
+    raise ValueError(f"Loja não suportada: {source['store']}")
+
+
 def _run_store(store: str, action: Callable[[], None]) -> None:
     try:
         action()
@@ -229,12 +243,17 @@ def _run_store(store: str, action: Callable[[], None]) -> None:
 
 
 def main(state_path: Path = DEFAULT_STATE_PATH) -> None:
-    model = "ASUS TUF VG27AQ5A"
-    monitor = find_monitor(model)
     state = load_state(state_path)
 
-    _run_store("Kabum", lambda: check_kabum(model, state, state_path))
-    _run_store("Amazon", lambda: check_amazon(monitor, state, state_path))
+    for monitor in MONITORS:
+        for source in monitor["sources"]:
+            label = f"{source['store']} / {monitor['model']}"
+            _run_store(
+                label,
+                lambda monitor=monitor, source=source: check_source(
+                    monitor, source, state, state_path
+                ),
+            )
 
 
 if __name__ == "__main__":

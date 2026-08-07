@@ -86,10 +86,21 @@ class NotificationDecisionTests(unittest.TestCase):
         self.assertFalse(should_notify(state, AMAZON_KEY, 1250.0, "deal"))
 
     def test_store_keys_are_independent(self):
-        state = notified_state(key=AMAZON_KEY)
+        state = new_state()
+        keys = (
+            "amazon:B0BSH2VZ5C",
+            "kabum:747516",
+            "kabum:613323",
+            "kabum:911990",
+            "kabum:626864",
+        )
+        for key in keys:
+            with self.subTest(key=key):
+                self.assertTrue(should_notify(state, key, 1289.0, "deal"))
+                record_notification(state, key, 1289.0, "deal")
+                self.assertFalse(should_notify(state, key, 1289.0, "deal"))
 
-        self.assertFalse(should_notify(state, AMAZON_KEY, 1289.0, "deal"))
-        self.assertTrue(should_notify(state, KABUM_KEY, 1289.0, "deal"))
+        self.assertEqual(set(state["offers"]), set(keys))
 
 
 class StateFileTests(unittest.TestCase):
