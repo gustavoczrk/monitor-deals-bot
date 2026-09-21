@@ -85,10 +85,11 @@ class EvaluatePriceTests(unittest.TestCase):
     @patch("main.check_amazon")
     @patch("main.check_kabum", side_effect=RuntimeError("falha Kabum"))
     def test_store_failure_does_not_stop_next_store(self, check_kabum, check_amazon):
-        app.main()
+        exit_code = app.main()
 
         self.assertEqual(check_kabum.call_count, 4)
         check_amazon.assert_called_once()
+        self.assertEqual(exit_code, 1)
 
     @patch("main.fetch_amazon_offer", side_effect=RuntimeError("falha Amazon"))
     def test_store_error_does_not_change_commercial_state(self, fetch_offer):
@@ -152,13 +153,14 @@ class EvaluatePriceTests(unittest.TestCase):
 
     @patch("main.check_source")
     def test_main_iterates_all_configured_sources(self, check_source):
-        app.main()
+        exit_code = app.main()
 
         source_ids = [call.args[1]["id"] for call in check_source.call_args_list]
         self.assertEqual(
             source_ids,
             ["747516", "B0BSH2VZ5C", "613323", "911990", "626864"],
         )
+        self.assertEqual(exit_code, 0)
 
     @patch("main.check_source")
     def test_one_product_error_does_not_interrupt_iteration(self, check_source):
@@ -171,12 +173,23 @@ class EvaluatePriceTests(unittest.TestCase):
 
         check_source.side_effect = run
 
-        app.main()
+        exit_code = app.main()
 
         self.assertEqual(
             visited,
             ["747516", "B0BSH2VZ5C", "613323", "911990", "626864"],
         )
+        self.assertEqual(exit_code, 1)
+
+    @patch(
+        "main.check_source",
+        side_effect=RuntimeError("NTFY_TOPIC não configurada"),
+    )
+    def test_configuration_failure_returns_nonzero_after_all_sources(self, check_source):
+        exit_code = app.main()
+
+        self.assertEqual(check_source.call_count, 5)
+        self.assertEqual(exit_code, 1)
 
 
 if __name__ == "__main__":

@@ -235,29 +235,36 @@ def check_source(
     raise ValueError(f"Loja não suportada: {source['store']}")
 
 
-def _run_store(store: str, action: Callable[[], None]) -> None:
+def _run_store(store: str, action: Callable[[], None]) -> bool:
     try:
         action()
     except (RuntimeError, ValueError, OSError) as error:
         print(f"Erro na {store}: {error}")
+        return False
+    return True
 
 
-def main(state_path: Path = DEFAULT_STATE_PATH) -> None:
+def main(state_path: Path = DEFAULT_STATE_PATH) -> int:
     state = load_state(state_path)
+    failed = False
 
     for monitor in MONITORS:
         for source in monitor["sources"]:
             label = f"{source['store']} / {monitor['model']}"
-            _run_store(
+            succeeded = _run_store(
                 label,
                 lambda monitor=monitor, source=source: check_source(
                     monitor, source, state, state_path
                 ),
             )
+            failed = failed or not succeeded
+
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
     try:
-        main()
+        exit_code = main()
     except RuntimeError as error:
         raise SystemExit(f"Erro: {error}") from error
+    raise SystemExit(exit_code)

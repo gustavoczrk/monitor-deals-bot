@@ -18,12 +18,28 @@ de `deal` para `hot`, volta à faixa após ser ignorada ou cai pelo menos R$ 50 
 
 - Python 3.10 ou superior
 - Um tópico ntfy
+- Windows PowerShell para usar os scripts de agendamento
 
-Defina o tópico antes de executar. No PowerShell:
+O projeto usa somente a biblioteca padrão do Python e não requer a instalação de
+pacotes externos. Em um clone limpo, crie o ambiente virtual esperado pelos
+scripts PowerShell:
+
+```powershell
+python -m venv .venv
+```
+
+Não é necessário ativar o ambiente virtual. Defina o tópico antes de executar:
 
 ```powershell
 $env:NTFY_TOPIC="seu-topico-ntfy"
 ```
+
+O arquivo `.env.example` serve apenas como referência: o bot não carrega arquivos
+`.env` automaticamente. Use a variável de ambiente conforme o exemplo acima.
+
+Escolha para `NTFY_TOPIC` um nome longo, aleatório e exclusivo, e nunca o
+versione. O envio padrão usa o servidor público `ntfy.sh` sem autenticação; por
+isso, um tópico nesse servidor não equivale a um canal privado autenticado.
 
 Para mantê-lo entre sessões do Windows sem gravá-lo no projeto:
 
@@ -38,6 +54,22 @@ Para mantê-lo entre sessões do Windows sem gravá-lo no projeto:
 ```
 
 O estado de deduplicação fica em `state.json`.
+
+O processo termina com código `0` quando todas as fontes são processadas sem
+erros operacionais. Se alguma fonte, configuração ou notificação falhar, as
+demais fontes ainda são processadas, mas o código final é `1`.
+
+## Personalização da watchlist
+
+Edite `watchlist.py` para alterar os produtos monitorados. Cada produto define:
+
+- `model`: nome exibido na notificação;
+- `alert_price`: maior preço classificado como oferta;
+- `hot_price`: maior preço classificado como oferta excelente;
+- `sources`: loja, identificador, modelo esperado e URL de cada página.
+
+Mantenha `hot_price` menor ou igual a `alert_price`, use um `id` único por fonte
+e preserve os nomes de loja atualmente suportados: `kabum` e `amazon`.
 
 ## Execução automática no Windows
 
@@ -66,5 +98,5 @@ Para remover somente a tarefa, preservando estado, logs e `NTFY_TOPIC`:
 ## Testes
 
 ```powershell
-python -m unittest discover -v
+.\.venv\Scripts\python.exe -m unittest discover -v
 ```
